@@ -250,6 +250,8 @@ enum RepPhase {
 // --- SHARED VARIABLES (Cross-Core) ---
 volatile WorkoutState workout_state = STATE_READY;
 volatile RepPhase rep_phase = PHASE_REST;
+volatile bool is_eccentric_first = false;
+volatile bool sound_muted = false;
 
 volatile int current_weight = 20;
 volatile int current_reps = 0;
@@ -476,6 +478,48 @@ String getExerciseName(int m, int e) {
     return String(exercise_db[m][e]);
 }
 
+bool determineIfEccentricFirst(String name) {
+    String lowerName = name;
+    lowerName.toLowerCase();
+    
+    // Check specific keywords for eccentric-first
+    if (lowerName.indexOf("squat") >= 0) return true;
+    if (lowerName.indexOf("bench") >= 0) return true; // Bench Press, Incline Bench, Decline Bench, Close Grip BP
+    if (lowerName.indexOf("fly") >= 0 && lowerName.indexOf("cable") == -1) return true; // Dumbbell Fly (but not Cable Fly/Cable Cross)
+    if (lowerName.indexOf("push-up") >= 0) return true;
+    if (lowerName.indexOf("pushup") >= 0) return true;
+    if (lowerName.indexOf("leg press") >= 0) return true;
+    if (lowerName.indexOf("lunge") >= 0) return true;
+    if (lowerName.indexOf("sissy") >= 0) return true;
+    if (lowerName.indexOf("wall sit") >= 0) return true;
+    
+    if (lowerName.indexOf("romanian") >= 0) return true; // Romanian DL, Cable RDL
+    if (lowerName.indexOf("rdl") >= 0) return true;
+    if (lowerName.indexOf("stiff leg") >= 0) return true; // Stiff Leg DL, Cable SL DL
+    if (lowerName.indexOf("good morning") >= 0) return true;
+    if (lowerName.indexOf("nordic") >= 0) return true;
+    if (lowerName.indexOf("glute-ham") >= 0) return true;
+    
+    if (lowerName.indexOf("skull") >= 0) return true; // Skull Crush
+    if (lowerName.indexOf("dip") >= 0) return true; // Dips
+    if (lowerName.indexOf("overhead ext") >= 0) return true; // Overhead Ext, Cable Overhd Ext
+    if (lowerName.indexOf("overhd ext") >= 0) return true;
+    
+    if (lowerName.indexOf("bulgarian") >= 0) return true; // Bulgarian SS
+    
+    return false;
+}
+
+void saveSoundConfig() {
+    File f = LittleFS.open("/sound_config.json", "w");
+    if (f) {
+        JsonDocument doc;
+        doc["muted"] = (bool)sound_muted;
+        serializeJson(doc, f);
+        f.close();
+    }
+}
+
 uint8_t getExerciseEquip(int m, int e) {
     if (m == 10) {
         return 1; // EQ_DUMBBELL for custom exercises
@@ -538,6 +582,15 @@ void loadDataFiles() {
     if (LittleFS.exists("/favs.bin")) {
         File f = LittleFS.open("/favs.bin", "r");
         f.read((uint8_t*)is_favorite, sizeof(is_favorite));
+        f.close();
+    }
+
+    if (LittleFS.exists("/sound_config.json")) {
+        File f = LittleFS.open("/sound_config.json", "r");
+        JsonDocument doc;
+        if (deserializeJson(doc, f) == DeserializationError::Ok) {
+            sound_muted = doc["muted"] | false;
+        }
         f.close();
     }
 
@@ -1004,6 +1057,19 @@ void drawUI() {
         canvas.fillCircle(wx, wy-1, 1.5, C_ACCENT);
     }
     
+    // Draw sound status icon (next to Wi-Fi, at x=171, y=4)
+    int sx = 171, sy = 4;
+    if (sound_muted) {
+        canvas.fillRect(sx, sy + 2, 2, 3, C_IRED);
+        canvas.fillTriangle(sx + 2, sy + 2, sx + 5, sy - 1, sx + 5, sy + 7, C_IRED);
+        canvas.drawLine(sx + 7, sy + 1, sx + 9, sy + 5, C_IRED);
+        canvas.drawLine(sx + 9, sy + 1, sx + 7, sy + 5, C_IRED);
+    } else {
+        canvas.fillRect(sx, sy + 2, 2, 3, C_IGREEN);
+        canvas.fillTriangle(sx + 2, sy + 2, sx + 5, sy - 1, sx + 5, sy + 7, C_IGREEN);
+        canvas.drawArc(sx + 4, sy + 3, 4, 3, -45, 45, C_IGREEN);
+    }
+    
     int batt = M5.Power.getBatteryLevel();
     batt = constrain(batt, 0, 100);
     uint16_t battCol = batt > 50 ? C_IGREEN : (batt > 20 ? C_IYELLOW : C_IRED);
@@ -1211,41 +1277,71 @@ void drawUI() {
                 break;
             }
             case STATE_SUMMARY: {
-                canvas.setTextColor(C_IGREEN);
-                canvas.setTextSize(1.5);
-                canvas.drawString("Set Complete", 10, 18);
+                static bool rest_beeped = false;
+                unsigned long rest_elapsed = millis() - rest_start_time;
+                int rest_sec = rest_elapsed / 1000;
+                int remaining = rest_target_sec - rest_sec;
+                bool done = remaining <= 0;
                 
-                int bw = 55;
-                for(int i=0; i<4; i++) {
-                    canvas.fillRoundRect(4 + i*58, 37, bw, 42, 6, C_CARD);
-                }
+                bool is_eco = (rest_sec >= 10 && remaining > 5 && !done && (millis() - last_key_activity_time > 5000));
                 
-                canvas.setTextColor(C_LABEL);
-                canvas.setTextSize(1);
-                canvas.drawString("REPS", 18, 41);
-                canvas.drawString("FORM", 76, 41);
-                canvas.drawString("VOL", 137, 41);
-                canvas.drawString("VBT", 195, 41);
-                
-                canvas.setTextSize(1.5);
-                canvas.setTextColor(WHITE);
-                canvas.drawString(String((int)current_reps), 22, 57);
-                
-                int bad = (int)current_poor_form_reps;
-                canvas.setTextColor(bad == 0 ? C_IGREEN : (bad < current_reps ? C_IYELLOW : C_IRED));
-                canvas.drawString(bad == 0 ? "OK" : String(bad) + "x", 78, 57);
-                
-                canvas.setTextColor(C_ACCENT);
-                canvas.drawString(String((int)(current_weight * current_reps)), 126, 57);
-                
-                canvas.setTextColor(C_IORANGE);
-                canvas.drawString(String(last_rep_peak_vel, 1), 185, 57);
-                
-                {
-                    unsigned long rest_elapsed = millis() - rest_start_time;
-                    int rest_sec = rest_elapsed / 1000;
-                    int remaining = rest_target_sec - rest_sec;
-                    bool done = remaining <= 0;
+                if (is_eco) {
+                    canvas.fillSprite(BLACK);
+                    
+                    canvas.setTextColor(C_IORANGE);
+                    canvas.setTextSize(6.5);
+                    char buf[8];
+                    sprintf(buf, "%d:%02d", remaining / 60, remaining % 60);
+                    String timerStr(buf);
+                    int tw = timerStr.length() * 36;
+                    canvas.drawString(timerStr, 120 - tw / 2, 45);
+                    
+                    int batt = M5.Power.getBatteryLevel();
+                    batt = constrain(batt, 0, 100);
+                    uint16_t battCol = batt > 50 ? C_IGREEN : (batt > 20 ? C_IYELLOW : C_IRED);
+                    int bx = 210, by = 4;
+                    canvas.drawRoundRect(bx, by, 22, 10, 2, C_IGRAY);
+                    canvas.fillRect(bx + 22, by + 3, 2, 4, C_IGRAY);
+                    int fillW = max(1, (batt * 18) / 100);
+                    canvas.fillRoundRect(bx + 2, by + 2, fillW, 6, 1, battCol);
+                    
+                    canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
+                    canvas.drawString("ECO MODE", 10, 5);
+                    
+                    if (current_backlight_brightness != 40) {
+                        current_backlight_brightness = 40;
+                        M5Cardputer.Display.setBrightness(current_backlight_brightness);
+                    }
+                } else {
+                    canvas.setTextColor(C_IGREEN);
+                    canvas.setTextSize(1.5);
+                    canvas.drawString("Set Complete", 10, 18);
+                    
+                    int bw = 55;
+                    for(int i=0; i<4; i++) {
+                        canvas.fillRoundRect(4 + i*58, 37, bw, 42, 6, C_CARD);
+                    }
+                    
+                    canvas.setTextColor(C_LABEL);
+                    canvas.setTextSize(1);
+                    canvas.drawString("REPS", 18, 41);
+                    canvas.drawString("FORM", 76, 41);
+                    canvas.drawString("VOL", 137, 41);
+                    canvas.drawString("VBT", 195, 41);
+                    
+                    canvas.setTextSize(1.5);
+                    canvas.setTextColor(WHITE);
+                    canvas.drawString(String((int)current_reps), 22, 57);
+                    
+                    int bad = (int)current_poor_form_reps;
+                    canvas.setTextColor(bad == 0 ? C_IGREEN : (bad < current_reps ? C_IYELLOW : C_IRED));
+                    canvas.drawString(bad == 0 ? "OK" : String(bad) + "x", 78, 57);
+                    
+                    canvas.setTextColor(C_ACCENT);
+                    canvas.drawString(String((int)(current_weight * current_reps)), 126, 57);
+                    
+                    canvas.setTextColor(C_IORANGE);
+                    canvas.drawString(String(last_rep_peak_vel, 1), 185, 57);
                     
                     canvas.fillRoundRect(20, 85, 200, 32, 8, C_CARD);
                     
@@ -1259,7 +1355,6 @@ void drawUI() {
                     }
                     canvas.drawString(buf, 90, 89);
                     
-                    // Draw live recovery heart rate inside the rest card (right-aligned)
                     if (ble_enabled) {
                         bool hr_stale = (millis() - last_heart_rate_time) > 6000;
                         if (connected && current_heart_rate > 0 && !hr_stale) {
@@ -1268,7 +1363,6 @@ void drawUI() {
                             uint16_t zoneCol = current_heart_rate > 156 ? C_IRED : (current_heart_rate > 117 ? C_IYELLOW : C_IGREEN);
                             uint16_t heartCol = pulse_on ? zoneCol : M5Cardputer.Display.color565(50, 50, 50);
                             
-                            // Heart icon centered at x=168, y=98
                             canvas.fillCircle(168 - 2, 98, 2, heartCol);
                             canvas.fillCircle(168 + 2, 98, 2, heartCol);
                             canvas.fillTriangle(168 - 4, 99, 168 + 4, 99, 168, 103, heartCol);
@@ -1281,28 +1375,19 @@ void drawUI() {
                     int prog = min(190, (int)((rest_sec * 190L) / rest_target_sec));
                     canvas.fillRoundRect(25, 113, max(3, prog), 2, 1, done ? C_IGREEN : C_ACCENT);
                     
-                    // Smart Battery Saver: Dim display after 10s of resting, but wake up in final 5s of countdown or if key is pressed
-                    if (rest_sec >= 10 && remaining > 5 && !done) {
-                        if (millis() - last_key_activity_time > 5000) {
-                            if (current_backlight_brightness != 40) {
-                                current_backlight_brightness = 40;
-                                M5Cardputer.Display.setBrightness(current_backlight_brightness);
-                            }
-                        }
-                    } else {
-                        if (current_backlight_brightness != 160) {
-                            current_backlight_brightness = 160;
-                            M5Cardputer.Display.setBrightness(current_backlight_brightness);
-                        }
+                    if (current_backlight_brightness != 160) {
+                        current_backlight_brightness = 160;
+                        M5Cardputer.Display.setBrightness(current_backlight_brightness);
                     }
-                    
-                    static bool rest_beeped = false;
-                    if (rest_sec == rest_target_sec && !rest_beeped) {
+                }
+                
+                if (rest_sec == rest_target_sec && !rest_beeped) {
+                    if (!sound_muted) {
                         M5Cardputer.Speaker.tone(4000, 300);
-                        rest_beeped = true;
-                    } else if (rest_sec != rest_target_sec) {
-                        rest_beeped = false;
                     }
+                    rest_beeped = true;
+                } else if (rest_sec != rest_target_sec) {
+                    rest_beeped = false;
                 }
                 break;
             }
@@ -2549,97 +2634,154 @@ void processRepetition() {
     static float peak_acc = 1.0f;                // track peak during concentric
     static float valley_acc = 1.0f;              // track valley during eccentric
 
-    switch (rep_phase) {
-        case PHASE_REST:
-            // Track if we're in the neutral zone
-            if (acc >= NEUTRAL_LOW && acc <= NEUTRAL_HIGH) {
-                in_neutral = true;
-            }
-            
-            // Only start a new rep if:
-            // 1) We passed through neutral zone
-            // 2) Cooldown from last rep has elapsed
-            // 3) Acceleration clearly exceeds threshold
-            if (in_neutral && acc > THRESHOLD_HIGH && (now - last_rep_time > COOLDOWN_MS)) {
-                rep_phase = PHASE_CONCENTRIC;
-                concentric_start_time = now;
-                peak_acc = acc;
-                in_neutral = false;
-                current_velocity = 0;
-                peak_velocity = 0;
-            }
-            break;
-            
-        case PHASE_CONCENTRIC:
-            // Integrate acceleration to estimate velocity
-            current_velocity += (acc - 1.0f) * 9.81f * 0.01f;
-            if (current_velocity > peak_velocity) peak_velocity = current_velocity;
-            
-            // Track peak acceleration during this phase
-            if (acc > peak_acc) peak_acc = acc;
-            
-            if (acc < THRESHOLD_LOW) {
-                unsigned long duration = now - concentric_start_time;
-                // Validate: must last at least MIN_PHASE_MS and have meaningful peak (adapted to high-sensitivity thresholds)
-                if (duration >= MIN_PHASE_MS && peak_acc > THRESHOLD_HIGH + 0.005f) {
-                    rep_phase = PHASE_ECCENTRIC;
-                    current_concentric_duration = duration;
-                    eccentric_start_time = now;
-                    valley_acc = acc;
-                } else {
-                    // Too short or too weak = noise, discard
+    if (!is_eccentric_first) {
+        // --- CONCENTRIC-FIRST WORKFLOW (Standard lifting first, e.g., curls, pulls) ---
+        switch (rep_phase) {
+            case PHASE_REST:
+                if (acc >= NEUTRAL_LOW && acc <= NEUTRAL_HIGH) {
+                    in_neutral = true;
+                }
+                if (in_neutral && acc > THRESHOLD_HIGH && (now - last_rep_time > COOLDOWN_MS)) {
+                    rep_phase = PHASE_CONCENTRIC;
+                    concentric_start_time = now;
+                    peak_acc = acc;
+                    in_neutral = false;
+                    current_velocity = 0;
+                    peak_velocity = 0;
+                }
+                break;
+                
+            case PHASE_CONCENTRIC:
+                current_velocity += (acc - 1.0f) * 9.81f * 0.01f;
+                if (current_velocity > peak_velocity) peak_velocity = current_velocity;
+                if (acc > peak_acc) peak_acc = acc;
+                
+                if (acc < THRESHOLD_LOW) {
+                    unsigned long duration = now - concentric_start_time;
+                    if (duration >= MIN_PHASE_MS && peak_acc > THRESHOLD_HIGH + 0.005f) {
+                        rep_phase = PHASE_ECCENTRIC;
+                        current_concentric_duration = duration;
+                        eccentric_start_time = now;
+                        valley_acc = acc;
+                    } else {
+                        rep_phase = PHASE_REST;
+                    }
+                } else if (now - concentric_start_time > PHASE_TIMEOUT) {
                     rep_phase = PHASE_REST;
                 }
-            } else if (now - concentric_start_time > PHASE_TIMEOUT) {
-                rep_phase = PHASE_REST; // timeout
-            }
-            break;
-            
-        case PHASE_ECCENTRIC:
-            // Track valley (lowest acceleration)
-            if (acc < valley_acc) valley_acc = acc;
-            
-            // Eccentric ends when acceleration returns above neutral
-            if (acc > NEUTRAL_HIGH) {
-                unsigned long duration = now - eccentric_start_time;
+                break;
                 
-                // Validate eccentric:
-                // 1) Lasted long enough
-                // 2) Valley was deep enough (real lowering, not just a bounce)
-                // 3) Total rep duration (concentric + eccentric) is at least 700ms (to capture short-range movements)
-                if (duration >= MIN_PHASE_MS && valley_acc < THRESHOLD_LOW - 0.005f && (current_concentric_duration + duration) >= 700) {
-                    current_eccentric_duration = duration;
-                    
-                    // === VALID REP ===
-                    current_reps++;
-                    last_rep_time = now;
-                    last_rep_peak_vel = peak_velocity;
-                    current_set_rep_velocities.push_back(peak_velocity);
-                    
-                    // Form assessment: eccentric should be slower than concentric
-                    float ratio = (float)current_eccentric_duration / (float)current_concentric_duration;
-                    if (ratio >= 1.2f) {
-                        bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green - good
-                        rep_beep_type = 1; // Good
-                    } else if (ratio >= 0.8f) {
-                        bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow - ok
-                        current_poor_form_reps++;
-                        rep_beep_type = 2; // Ok
-                    } else {
-                        bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red - bad
-                        current_poor_form_reps++;
-                        rep_beep_type = 3; // Bad
+            case PHASE_ECCENTRIC:
+                if (acc < valley_acc) valley_acc = acc;
+                
+                if (acc > NEUTRAL_HIGH) {
+                    unsigned long duration = now - eccentric_start_time;
+                    if (duration >= MIN_PHASE_MS && valley_acc < THRESHOLD_LOW - 0.005f && (current_concentric_duration + duration) >= 700) {
+                        current_eccentric_duration = duration;
+                        current_reps++;
+                        last_rep_time = now;
+                        last_rep_peak_vel = peak_velocity;
+                        current_set_rep_velocities.push_back(peak_velocity);
+                        
+                        float ratio = (float)current_eccentric_duration / (float)current_concentric_duration;
+                        bool good_form = (ratio >= 1.2f) || (current_eccentric_duration >= 1500);
+                        bool ok_form = (ratio >= 0.8f) || (current_eccentric_duration >= 1000);
+                        
+                        if (good_form) {
+                            bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green
+                            rep_beep_type = 1;
+                        } else if (ok_form) {
+                            bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow
+                            current_poor_form_reps++;
+                            rep_beep_type = 2;
+                        } else {
+                            bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red
+                            current_poor_form_reps++;
+                            rep_beep_type = 3;
+                        }
                     }
+                    rep_phase = PHASE_REST;
+                    in_neutral = false;
+                } else if (now - eccentric_start_time > PHASE_TIMEOUT) {
+                    rep_phase = PHASE_REST;
+                    in_neutral = false;
                 }
+                break;
+        }
+    } else {
+        // --- ECCENTRIC-FIRST WORKFLOW (Lowering first, e.g., squat, bench press, leg press) ---
+        switch (rep_phase) {
+            case PHASE_REST:
+                if (acc >= NEUTRAL_LOW && acc <= NEUTRAL_HIGH) {
+                    in_neutral = true;
+                }
+                if (in_neutral && acc < THRESHOLD_LOW && (now - last_rep_time > COOLDOWN_MS)) {
+                    rep_phase = PHASE_ECCENTRIC;
+                    eccentric_start_time = now;
+                    valley_acc = acc;
+                    in_neutral = false;
+                    current_velocity = 0;
+                    peak_velocity = 0;
+                }
+                break;
                 
-                // Always go back to REST (require neutral zone before next rep)
-                rep_phase = PHASE_REST;
-                in_neutral = false; // must cross neutral zone again
-            } else if (now - eccentric_start_time > PHASE_TIMEOUT) {
-                rep_phase = PHASE_REST;
-                in_neutral = false;
-            }
-            break;
+            case PHASE_ECCENTRIC:
+                if (acc < valley_acc) valley_acc = acc;
+                
+                if (acc > THRESHOLD_HIGH) {
+                    unsigned long duration = now - eccentric_start_time;
+                    if (duration >= MIN_PHASE_MS && valley_acc < THRESHOLD_LOW - 0.005f) {
+                        rep_phase = PHASE_CONCENTRIC;
+                        current_eccentric_duration = duration;
+                        concentric_start_time = now;
+                        peak_acc = acc;
+                    } else {
+                        rep_phase = PHASE_REST;
+                    }
+                } else if (now - eccentric_start_time > PHASE_TIMEOUT) {
+                    rep_phase = PHASE_REST;
+                }
+                break;
+                
+            case PHASE_CONCENTRIC:
+                current_velocity += (acc - 1.0f) * 9.81f * 0.01f;
+                if (current_velocity > peak_velocity) peak_velocity = current_velocity;
+                if (acc > peak_acc) peak_acc = acc;
+                
+                if (acc < NEUTRAL_LOW) {
+                    unsigned long duration = now - concentric_start_time;
+                    if (duration >= MIN_PHASE_MS && peak_acc > THRESHOLD_HIGH + 0.005f && (current_eccentric_duration + duration) >= 700) {
+                        current_concentric_duration = duration;
+                        current_reps++;
+                        last_rep_time = now;
+                        last_rep_peak_vel = peak_velocity;
+                        current_set_rep_velocities.push_back(peak_velocity);
+                        
+                        float ratio = (float)current_eccentric_duration / (float)current_concentric_duration;
+                        bool good_form = (ratio >= 1.2f) || (current_eccentric_duration >= 1500);
+                        bool ok_form = (ratio >= 0.8f) || (current_eccentric_duration >= 1000);
+                        
+                        if (good_form) {
+                            bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green
+                            rep_beep_type = 1;
+                        } else if (ok_form) {
+                            bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow
+                            current_poor_form_reps++;
+                            rep_beep_type = 2;
+                        } else {
+                            bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red
+                            current_poor_form_reps++;
+                            rep_beep_type = 3;
+                        }
+                    }
+                    rep_phase = PHASE_REST;
+                    in_neutral = false;
+                } else if (now - concentric_start_time > PHASE_TIMEOUT) {
+                    rep_phase = PHASE_REST;
+                    in_neutral = false;
+                }
+                break;
+        }
     }
 }
 
@@ -2785,6 +2927,8 @@ void setup() {
     loadRoutines();
     loadCustomExercises();
     
+    is_eccentric_first = determineIfEccentricFirst(active_exercise);
+    
     // Initialize IMU
     M5.Imu.begin();
     
@@ -2854,6 +2998,27 @@ void setup() {
     
     server.on("/heartrate", HTTP_GET, [](AsyncWebServerRequest *request){
         String json = "{\"hr\":" + String(current_heart_rate) + ",\"connected\":" + (connected ? "true" : "false") + "}";
+        request->send(200, "application/json", json);
+    });
+
+    server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        String json = "{\"hr\":" + String(current_heart_rate) + 
+                      ",\"connected\":" + (connected ? "true" : "false") + 
+                      ",\"muted\":" + (sound_muted ? "true" : "false") + 
+                      ",\"battery\":" + String(M5.Power.getBatteryLevel()) + "}";
+        request->send(200, "application/json", json);
+    });
+
+    server.on("/mute", HTTP_POST, [](AsyncWebServerRequest *request){
+        if (request->hasParam("muted", true)) {
+            String val = request->getParam("muted", true)->value();
+            sound_muted = (val == "true" || val == "1");
+            saveSoundConfig();
+        } else {
+            sound_muted = !sound_muted;
+            saveSoundConfig();
+        }
+        String json = "{\"muted\":" + String(sound_muted ? "true" : "false") + "}";
         request->send(200, "application/json", json);
     });
     
@@ -3106,6 +3271,7 @@ void loop() {
                         current_set_number = routines[active_routine_idx].exercises[ex_idx].completed_sets;
                     } else {
                         workout_state = STATE_ACTIVE;
+                        is_eccentric_first = determineIfEccentricFirst(active_exercise);
                         current_reps = 0;
                         current_poor_form_reps = 0;
                         current_set_rep_velocities.clear();
@@ -3371,6 +3537,9 @@ void loop() {
                         } else {
                             doScan = true;
                         }
+                    } else if (i == 'm' || i == 'M') {
+                        sound_muted = !sound_muted;
+                        saveSoundConfig();
                     } else if (current_view == VIEW_WORKOUT && workout_state == STATE_READY) {
                         if (i == 'e' || i == 'E') {
                             editing_weight = true;

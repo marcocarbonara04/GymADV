@@ -8,7 +8,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GymTracker ADV - Dashboard</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        /* System fonts - no external dependencies, works offline in AP mode */
 
         :root {
             --bg-base: #030712;
@@ -40,7 +40,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         }
 
         body {
-            font-family: 'Outfit', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background-color: var(--bg-base);
             color: var(--text-main);
             min-height: 100vh;
@@ -107,7 +107,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         .navbar h1 {
             font-size: 1.25rem;
             font-weight: 800;
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Segoe UI', Roboto, 'Courier New', monospace;
             background: linear-gradient(135deg, #a5f3fc, var(--color-primary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -291,7 +291,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         .card-value {
             font-size: 2.5rem;
             font-weight: 700;
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Segoe UI', Roboto, 'Courier New', monospace;
             display: flex;
             align-items: baseline;
             gap: 0.2rem;
@@ -414,7 +414,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         }
 
         .battery-text {
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Segoe UI', Roboto, 'Courier New', monospace;
             font-size: 0.85rem;
             font-weight: 700;
         }
@@ -474,7 +474,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         .history-card .card-header {
             padding: 1.5rem 1.5rem 0.5rem 1.5rem;
             font-size: 0.95rem;
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Segoe UI', Roboto, 'Courier New', monospace;
             text-transform: none;
             letter-spacing: 0;
             display: flex;
@@ -772,7 +772,7 @@ const char index_html[] PROGMEM = R"rawliteral(
                     <div class="card-value" id="val-heartrate" style="color: var(--text-muted);">--<span class="card-unit">bpm</span></div>
                     <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.45rem; display: flex; align-items: center; justify-content: space-between;">
                         <span id="hr-status-text">Sensor disconnected</span>
-                        <span id="ping-text" style="font-family: 'Space Grotesk', sans-serif;">Ping: --</span>
+                        <span id="ping-text" style="font-family: 'Segoe UI', Roboto, monospace;">Ping: --</span>
                     </div>
                 </div>
                 <!-- Execution Quality Card -->
@@ -800,7 +800,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             <!-- Device Control Center Panel -->
             <div class="grid" style="grid-template-columns: 1fr;">
                 <div class="card">
-                    <div class="card-header" style="font-size:0.8rem; font-family: 'Space Grotesk', sans-serif; text-transform:none; letter-spacing:0; font-weight:700; color:var(--text-main);">
+                    <div class="card-header" style="font-size:0.8rem; font-family: 'Segoe UI', Roboto, monospace; text-transform:none; letter-spacing:0; font-weight:700; color:var(--text-main);">
                         <span>Device Control Panel (Cardputer Hardware)</span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
                     </div>
@@ -884,7 +884,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             
             <div class="card" style="margin-top: 1.5rem;">
                 <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; width:100%; flex-wrap: wrap; gap: 0.5rem;">
-                    <span style="font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; text-transform:none; font-weight:700; color:var(--text-main);">Interactive Set Curve</span>
+                    <span style="font-family: 'Segoe UI', Roboto, monospace; font-size: 0.95rem; text-transform:none; font-weight:700; color:var(--text-main);">Interactive Set Curve</span>
                     <select id="cardio-set-select" onchange="renderInteractiveChart()" style="background: #111827; color: #fff; border: 1px solid var(--border-color); padding: 0.45rem 1rem; border-radius: 0.65rem; font-family: inherit; font-size: 0.85rem; outline: none; cursor: pointer; transition: var(--transition-smooth);">
                         <option value="">No sets loaded</option>
                     </select>
@@ -898,7 +898,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             </div>
             
             <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header" style="font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; text-transform:none; font-weight:700; color:var(--text-main);">Session Heart Rate Progression (Avg/Max per Set)</div>
+                <div class="card-header" style="font-family: 'Segoe UI', Roboto, monospace; font-size: 0.95rem; text-transform:none; font-weight:700; color:var(--text-main);">Session Heart Rate Progression (Avg/Max per Set)</div>
                 <div style="padding: 1rem 0; overflow-x: auto;">
                     <div id="cardio-progression-chart" style="width: 100%; min-width: 500px; height: 180px;">
                         <div class="empty-state">No heart rate progression available.</div>
@@ -1180,13 +1180,13 @@ const char index_html[] PROGMEM = R"rawliteral(
 
                     html += `
                         <tr>
-                            <td style="color:var(--text-muted); font-family: 'Space Grotesk', sans-serif;">${formatTime(ts)}</td>
+                            <td style="color:var(--text-muted); font-family: 'Segoe UI', Roboto, monospace;">${formatTime(ts)}</td>
                             <td><span class="badge badge-exercise">${exerciseName}</span></td>
-                            <td style="font-family: 'Space Grotesk', sans-serif;"><strong style="color:#fff">${weight}</strong> kg</td>
-                            <td style="font-family: 'Space Grotesk', sans-serif;"><strong style="color:#fff">${reps}</strong></td>
-                            <td style="font-family: 'Space Grotesk', sans-serif;">${vbtStr}</td>
+                            <td style="font-family: 'Segoe UI', Roboto, monospace;"><strong style="color:#fff">${weight}</strong> kg</td>
+                            <td style="font-family: 'Segoe UI', Roboto, monospace;"><strong style="color:#fff">${reps}</strong></td>
+                            <td style="font-family: 'Segoe UI', Roboto, monospace;">${vbtStr}</td>
                             <td>${hrStr}</td>
-                            <td style="color:var(--color-primary); font-family: 'Space Grotesk', sans-serif;">${volume} kg</td>
+                            <td style="color:var(--color-primary); font-family: 'Segoe UI', Roboto, monospace;">${volume} kg</td>
                             <td><span class="badge ${badgeClass}">${badgeText}</span></td>
                         </tr>
                     `;

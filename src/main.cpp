@@ -2983,7 +2983,7 @@ void setup() {
     
     // Setup Web Server
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
+        request->send(200, "text/html", index_html);
     });
     
     // Catch-all for captive portal

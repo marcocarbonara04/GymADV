@@ -8,7 +8,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include <DNSServer.h>
-#include "web_dashboard.h"
+#include "web_dashboard_gz.h"
 #include "exercises.h"
 #include <sys/time.h>
 #include <BLEDevice.h>
@@ -2983,7 +2983,9 @@ void setup() {
     
     // Setup Web Server
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", index_html);
+        AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html_gz, index_html_gz_len);
+        response->addHeader("Content-Encoding", "gzip");
+        request->send(response);
     });
     
     // Catch-all for captive portal

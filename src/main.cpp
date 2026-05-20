@@ -222,6 +222,7 @@ const char* AP_PASS = "12345678";
 const char* SD_DIR = "/GymTracker";
 const int SD_CS_PIN = 12; // M5Cardputer SD card CS pin
 bool sd_available = false;
+bool show_wifi_qr = false;
 
 // Dynamically fetch the active filesystem for workout logs (SD if present, otherwise LittleFS fallback)
 fs::FS& getWorkoutLogFS() {
@@ -965,6 +966,37 @@ void drawProgressRing(M5Canvas &c, int cx, int cy, int r_out, int r_in, int pct,
 }
 
 void drawUI() {
+    // --- Wi-Fi QR Code Overlay ---
+    if (show_wifi_qr) {
+        canvas.fillSprite(C_BG);
+        
+        // Title
+        canvas.setTextColor(C_ACCENT); canvas.setTextSize(1.2);
+        canvas.drawString("Scan to connect Wi-Fi", 10, 4);
+        canvas.drawLine(0, 16, 240, 16, C_CARD);
+        
+        // Draw QR code using M5GFX built-in method
+        String qrContent = "WIFI:T:WPA;S:" + String(AP_SSID) + ";P:" + String(AP_PASS) + ";;";
+        // QR code centered: 95x95 pixels, positioned in the center of the remaining area
+        int qr_size = 95;
+        int qr_x = (240 - qr_size) / 2;
+        int qr_y = 20;
+        canvas.qrcode(qrContent.c_str(), qr_x, qr_y, qr_size, 4);
+        
+        // Network info below QR
+        canvas.setTextColor(C_IORANGE); canvas.setTextSize(1);
+        canvas.drawString("SSID: " + String(AP_SSID), 10, 119);
+        canvas.setTextColor(C_IGRAY);
+        canvas.drawString("IP: 192.168.4.1", 148, 119);
+        
+        // Dismiss hint
+        canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
+        canvas.drawString("Press any key to close", 55, 130);
+        
+        canvas.pushSprite(0, 0);
+        return;
+    }
+    
     // If not in rest mode or not in workout view, ensure display is at full brightness
     if (workout_state != STATE_SUMMARY || current_view != VIEW_WORKOUT) {
         if (current_backlight_brightness != 160) {
@@ -3214,6 +3246,11 @@ void loop() {
             current_backlight_brightness = 160;
             M5Cardputer.Display.setBrightness(current_backlight_brightness);
         }
+        // Dismiss Wi-Fi QR overlay on any keypress (except W which toggles)
+        if (show_wifi_qr) {
+            // Will be handled in key processing below, but for non-character keys:
+            show_wifi_qr = false;
+        }
     }
     
     // Handle Input
@@ -3522,8 +3559,11 @@ void loop() {
                         history_confirm_delete = false;
                         routine_confirm_delete = false;
                     } else if (i == 'w' || i == 'W') {
-                        if (!wifi_enabled) {
+                        if (show_wifi_qr) {
+                            show_wifi_qr = false;
+                        } else if (!wifi_enabled) {
                             startWiFi();
+                            show_wifi_qr = true;
                         } else {
                             stopWiFi();
                         }

@@ -1,0 +1,18 @@
+# PlatformIO rules
+.pio
+.pioenvs
+.piolibdeps
+.clang_complete
+.gcc-flags.json
+build.log
+
+# VS Code rules
+.vscode/
+.vscode/.browse.c_cpp.db
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/settings.json
+.vscode/tasks.json
+
+# Local configuration / secrets (if any)
+*.local

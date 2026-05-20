@@ -2793,7 +2793,6 @@ void imuTask(void *pvParameters) {
 // --- WI-FI MANAGER SUPPORTING HOME STATION (STA) & ACCESS POINT (AP) CONCURRENCY ---
 void startWiFi() {
     WiFi.disconnect(true);
-    WiFi.mode(WIFI_AP_STA);
     
     String ssid = "";
     String pass = "";
@@ -2809,7 +2808,9 @@ void startWiFi() {
         }
     }
     
+    bool connected_sta = false;
     if (ssid.length() > 0) {
+        WiFi.mode(WIFI_AP_STA);
         Serial.print("Connecting to Home Wi-Fi: ");
         Serial.println(ssid);
         WiFi.begin(ssid.c_str(), pass.c_str());
@@ -2823,12 +2824,22 @@ void startWiFi() {
         if (WiFi.status() == WL_CONNECTED) {
             Serial.print("Connected! IP: ");
             Serial.println(WiFi.localIP());
+            connected_sta = true;
         } else {
-            Serial.println("Connection failed. Starting Access Point mode...");
+            Serial.println("Connection failed. Starting pure Access Point mode...");
         }
     }
     
-    // Always start AP mode as fallback / concurrent so the user can configure it if STA fails
+    if (!connected_sta) {
+        WiFi.mode(WIFI_AP);
+    }
+    
+    // Explicitly configure IP for the Access Point to ensure mobile routing stability
+    IPAddress local_IP(192, 168, 4, 1);
+    IPAddress gateway(192, 168, 4, 1);
+    IPAddress subnet(255, 255, 255, 0);
+    WiFi.softAPConfig(local_IP, gateway, subnet);
+    
     WiFi.softAP(AP_SSID, AP_PASS);
     server.begin();
     wifi_enabled = true;

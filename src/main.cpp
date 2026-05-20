@@ -7,6 +7,7 @@
 #include <LittleFS.h>
 #include <SD.h>
 #include <SPI.h>
+#include <DNSServer.h>
 #include "web_dashboard.h"
 #include "exercises.h"
 #include <sys/time.h>
@@ -650,6 +651,8 @@ void checkAndUpdatePR(String ex, float e1rm) {
 }
 
 AsyncWebServer server(80);
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
 
 // --- CUSTOM ROUTINES DEFINITIONS ---
 struct RoutineExercise {
@@ -977,21 +980,31 @@ void drawUI() {
         
         // Draw QR code using M5GFX built-in method
         String qrContent = "WIFI:T:WPA;S:" + String(AP_SSID) + ";P:" + String(AP_PASS) + ";;";
-        // QR code centered: 95x95 pixels, positioned in the center of the remaining area
-        int qr_size = 95;
-        int qr_x = (240 - qr_size) / 2;
-        int qr_y = 20;
-        canvas.qrcode(qrContent.c_str(), qr_x, qr_y, qr_size, 4);
+        // Maximize QR code size (screen height is 135)
+        int qr_size = 125;
+        int qr_x = 5;
+        int qr_y = 5;
+        canvas.qrcode(qrContent.c_str(), qr_x, qr_y, qr_size, 2);
         
-        // Network info below QR
-        canvas.setTextColor(C_IORANGE); canvas.setTextSize(1);
-        canvas.drawString("SSID: " + String(AP_SSID), 10, 119);
+        // Network info to the right of QR code
+        int text_x = 135;
+        canvas.setTextColor(C_ACCENT); canvas.setTextSize(1);
+        canvas.drawString("GymTracker", text_x, 15);
+        canvas.drawString("Wi-Fi", text_x, 30);
+        
+        canvas.setTextColor(C_IORANGE);
+        canvas.drawString("SSID:", text_x, 55);
+        canvas.setTextColor(WHITE);
+        canvas.drawString(String(AP_SSID), text_x, 70);
+        
         canvas.setTextColor(C_IGRAY);
-        canvas.drawString("IP: 192.168.4.1", 148, 119);
+        canvas.drawString("IP:", text_x, 95);
+        canvas.setTextColor(WHITE);
+        canvas.drawString("192.168.4.1", text_x, 110);
         
         // Dismiss hint
         canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
-        canvas.drawString("Press any key to close", 55, 130);
+        canvas.drawString("Press any key to close", 10, 133);
         
         canvas.pushSprite(0, 0);
         return;
@@ -2873,6 +2886,10 @@ void startWiFi() {
     WiFi.softAPConfig(local_IP, gateway, subnet);
     
     WiFi.softAP(AP_SSID, AP_PASS);
+    
+    // Start DNS server for captive portal
+    dnsServer.start(DNS_PORT, "*", local_IP);
+    
     server.begin();
     wifi_enabled = true;
     
@@ -2894,6 +2911,7 @@ void startWiFi() {
 }
 
 void stopWiFi() {
+    dnsServer.stop();
     server.end();
     WiFi.disconnect(true);
     WiFi.softAPdisconnect(true);
@@ -2966,6 +2984,11 @@ void setup() {
     // Setup Web Server
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send_P(200, "text/html", index_html);
+    });
+    
+    // Catch-all for captive portal
+    server.onNotFound([](AsyncWebServerRequest *request){
+        request->redirect("http://192.168.4.1/");
     });
     
     server.on("/time", HTTP_POST, [](AsyncWebServerRequest *request){
@@ -3238,6 +3261,9 @@ void setup() {
 }
 
 void loop() {
+    if (wifi_enabled) {
+        dnsServer.processNextRequest();
+    }
     M5Cardputer.update();
     
     if (M5Cardputer.Keyboard.isPressed()) {

@@ -876,7 +876,8 @@ M5Canvas canvas(&M5Cardputer.Display);
 
 enum AppView { VIEW_WORKOUT, VIEW_STATS, VIEW_EXERCISES, VIEW_HISTORY, VIEW_PR, VIEW_ROUTINES, VIEW_CARDIO, VIEW_HELP, VIEW_HISTORY_DETAIL };
 AppView current_view = VIEW_WORKOUT;
-int help_page = 0;
+int help_selected_idx = 0;
+int help_scroll_offset = 0;
 
 // History browsing
 SessionLog history_sessions[10];
@@ -2151,81 +2152,65 @@ void drawUI() {
             canvas.drawString("UP/DOWN:field ENT:save DEL:cancel", 10, 110);
         }
     } else if (current_view == VIEW_HELP) {
-        if (help_page == 0) {
-            canvas.setTextColor(C_ACCENT); canvas.setTextSize(1.5);
-            canvas.drawString("GymTracker Help - Keys (1/2)", 10, 18);
-            
-            canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
-            canvas.drawString("Press -> for Info", 145, 19);
-            
-            // Draw Glassmorphic Cards
-            // Column 1: Navigation
-            canvas.fillRoundRect(5, 34, 112, 80, 6, C_CARD);
-            canvas.drawRoundRect(5, 34, 112, 80, 6, C_CARD_HI);
-            
-            canvas.setTextColor(C_IORANGE); canvas.setTextSize(1.2);
-            canvas.drawString("VIEWS (1-7)", 12, 38);
-            canvas.setTextSize(1);
-            canvas.setTextColor(WHITE); canvas.drawString("1:", 12, 50); canvas.setTextColor(C_IGRAY); canvas.drawString("Workout View", 24, 50);
-            canvas.setTextColor(WHITE); canvas.drawString("2:", 12, 60); canvas.setTextColor(C_IGRAY); canvas.drawString("Statistics", 24, 60);
-            canvas.setTextColor(WHITE); canvas.drawString("7:", 12, 70); canvas.setTextColor(C_IGRAY); canvas.drawString("Cardio (Live)", 24, 70);
-            canvas.setTextColor(WHITE); canvas.drawString("3:", 12, 80); canvas.setTextColor(C_IGRAY); canvas.drawString("Exercises/Fav", 24, 80);
-            canvas.setTextColor(WHITE); canvas.drawString("4:", 12, 90); canvas.setTextColor(C_IGRAY); canvas.drawString("History Logs", 24, 90);
-            canvas.setTextColor(WHITE); canvas.drawString("5:", 12, 100); canvas.setTextColor(C_IGRAY); canvas.drawString("Personal Rec.", 24, 100);
-            canvas.setTextColor(WHITE); canvas.drawString("6:", 12, 110); canvas.setTextColor(C_IGRAY); canvas.drawString("Routines/Routs", 24, 110);
+        struct HelpItem {
+            const char* key;
+            const char* desc;
+            uint16_t color;
+        };
 
-            // Column 2: Commands
-            canvas.fillRoundRect(122, 34, 113, 80, 6, C_CARD);
-            canvas.drawRoundRect(122, 34, 113, 80, 6, C_CARD_HI);
-            
-            canvas.setTextColor(C_IGREEN); canvas.setTextSize(1.2);
-            canvas.drawString("COMMANDS", 129, 38);
-            canvas.setTextSize(1);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("W:", 129, 50); canvas.setTextColor(C_IGRAY); canvas.drawString("Wi-Fi On/Off", 143, 50);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("B:", 129, 60); canvas.setTextColor(C_IGRAY); canvas.drawString("MiBand BLE", 143, 60);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("E:", 129, 70); canvas.setTextColor(C_IGRAY); canvas.drawString("Edit Weight", 143, 70);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("SPC:", 129, 80); canvas.setTextColor(C_IGRAY); canvas.drawString("Toggle Fav", 153, 80);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("ENT:", 129, 90); canvas.setTextColor(C_IGRAY); canvas.drawString("Start / OK", 153, 90);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("DEL:", 129, 100); canvas.setTextColor(C_IGRAY); canvas.drawString("Del/Esc/Back", 153, 100);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("Q:", 129, 110); canvas.setTextColor(C_IGRAY); canvas.drawString("Complete Set", 153, 110);
-        } else {
-            canvas.setTextColor(C_ACCENT); canvas.setTextSize(1.5);
-            canvas.drawString("GymTracker Help - Info (2/2)", 10, 18);
-            
-            canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
-            canvas.drawString("Press <- for Keys", 140, 19);
-            
-            // Draw Glassmorphic Cards
-            // Column 1: Info VBT (Velocity Based Training)
-            canvas.fillRoundRect(5, 34, 112, 80, 6, C_CARD);
-            canvas.drawRoundRect(5, 34, 112, 80, 6, C_CARD_HI);
-            
-            canvas.setTextColor(C_IORANGE); canvas.setTextSize(1.1);
-            canvas.drawString("VBT & IMU", 12, 38);
-            canvas.setTextSize(1);
-            canvas.setTextColor(WHITE); canvas.drawString("Cardputer tracks", 12, 50);
-            canvas.drawString("reps using the IMU", 12, 58);
-            canvas.drawString("Acoustic BEEP:", 12, 68);
-            canvas.setTextColor(C_IGREEN); canvas.drawString("- Good: Perfect form", 12, 78);
-            canvas.setTextColor(C_IYELLOW); canvas.drawString("- Mid: Normal form", 12, 88);
-            canvas.setTextColor(C_IRED); canvas.drawString("- Bad: Too fast/drop", 12, 98);
-            canvas.setTextColor(C_IGRAY); canvas.drawString("Space: Toggle Fav", 12, 107);
+        static const HelpItem help_items[] = {
+            {"1-7", "Switch Views (Workout, Stats, Exs...)", C_IORANGE},
+            {"h/H", "Toggle Help screen (Open/Close)", C_IYELLOW},
+            {"w/W", "Toggle Wi-Fi (Start AP / Client)", C_IYELLOW},
+            {"b/B", "Toggle BLE scanning for Mi Band", C_IYELLOW},
+            {"m/M", "Toggle Speaker Mute (Sound Toggle)", C_IGREEN},
+            {"e/E", "Edit Weight (only in Ready state)", C_IYELLOW},
+            {"0-9", "Manual override reps (Active state)", C_IYELLOW},
+            {"SPC", "Toggle Favorite exercise in list", C_IYELLOW},
+            {"ENT", "Start Set / OK / Save Input", C_IYELLOW},
+            {"DEL", "Cancel / Back / Delete completed Set", C_IYELLOW},
+            {"q/Q", "Complete Set / End workout session", C_IYELLOW},
+            {"VBT", "Beep feedback: Green/Yellow/Red reps", C_IORANGE},
+            {"AP", "WiFi Dashboard at http://192.168.4.1", C_ACCENT},
+            {"WiFi", "Client WiFi: sync logs & curves", C_ACCENT}
+        };
+        static const int HELP_ITEMS_COUNT = sizeof(help_items) / sizeof(help_items[0]);
 
-            // Column 2: Dashboard & BLE
-            canvas.fillRoundRect(122, 34, 113, 80, 6, C_CARD);
-            canvas.drawRoundRect(122, 34, 113, 80, 6, C_CARD_HI);
-            
-            canvas.setTextColor(C_IGREEN); canvas.setTextSize(1.1);
-            canvas.drawString("WIFI & BLE INFO", 129, 38);
-            canvas.setTextSize(1);
-            canvas.setTextColor(WHITE); canvas.drawString("1. Link MiBand:", 129, 48);
-            canvas.setTextColor(C_IGRAY); canvas.drawString("Press BLE (B).", 129, 57);
-            canvas.drawString("Auto-scans/connects", 129, 65);
-            canvas.setTextColor(WHITE); canvas.drawString("2. Web Dashboard:", 129, 77);
-            canvas.setTextColor(C_IGRAY); canvas.drawString("Save home Wi-Fi", 129, 86);
-            canvas.drawString("to browse log diary,", 129, 94);
-            canvas.drawString("view heart charts,", 129, 102);
-            canvas.drawString("or download CSV!", 129, 110);
+        // Draw header
+        canvas.setTextColor(C_ACCENT); canvas.setTextSize(1.2);
+        canvas.drawString("GymTracker Help (Scroll with ;, .)", 10, 10);
+        canvas.drawLine(0, 22, 240, 22, C_CARD);
+
+        // Adjust scroll offset
+        if (help_selected_idx < 0) help_selected_idx = 0;
+        if (help_selected_idx >= HELP_ITEMS_COUNT) help_selected_idx = HELP_ITEMS_COUNT - 1;
+        if (help_selected_idx < help_scroll_offset) {
+            help_scroll_offset = help_selected_idx;
+        }
+        if (help_selected_idx >= help_scroll_offset + 5) {
+            help_scroll_offset = help_selected_idx - 5 + 1;
+        }
+
+        // Render visible items
+        for (int i = 0; i < 5; i++) {
+            int idx = help_scroll_offset + i;
+            if (idx >= HELP_ITEMS_COUNT) break;
+
+            const auto &item = help_items[idx];
+            bool sel = (idx == help_selected_idx);
+            int y = 26 + i * 21;
+
+            canvas.fillRoundRect(6, y, 228, 18, 4, sel ? C_CARD_HI : C_CARD);
+            if (sel) {
+                canvas.drawRoundRect(6, y, 228, 18, 4, C_ACCENT);
+            }
+
+            canvas.fillRoundRect(10, y + 2, 42, 14, 3, item.color);
+            canvas.setTextColor(BLACK); canvas.setTextSize(1);
+            canvas.drawCentreString(item.key, 31, y + 5);
+
+            canvas.setTextColor(sel ? WHITE : C_LABEL);
+            canvas.drawString(item.desc, 58, y + 5);
         }
     }
     
@@ -3519,7 +3504,8 @@ void loop() {
                             current_view = VIEW_WORKOUT;
                         } else {
                             current_view = VIEW_HELP;
-                            help_page = 0;
+                            help_selected_idx = 0;
+                            help_scroll_offset = 0;
                         }
                         bg_color = BLACK;
                         history_confirm_delete = false;
@@ -3777,11 +3763,13 @@ void loop() {
                             }
                         }
                     } else if (current_view == VIEW_HELP) {
-                        if (i == ',' || i == '<') { // LEFT Arrow
-                            help_page = 0;
+                        if (i == ';' || i == ',') { // UP
+                            if (help_selected_idx > 0) help_selected_idx--;
+                            else help_selected_idx = 13; // Wrap to last
                         }
-                        if (i == '/' || i == '?') { // RIGHT Arrow
-                            help_page = 1;
+                        if (i == '.' || i == '/') { // DOWN
+                            if (help_selected_idx < 13) help_selected_idx++;
+                            else help_selected_idx = 0; // Wrap to first
                         }
                     }
                 }

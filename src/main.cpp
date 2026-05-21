@@ -3908,17 +3908,23 @@ void loop() {
     // Handle rep beep from Core 0 (Audio & WS2812 Visual VBT feedback)
     if (rep_beep_type > 0) {
         if (rep_beep_type == 1) {
-            M5Cardputer.Speaker.tone(2000, 80); // High crisp beep for Good form
+            if (!sound_muted) {
+                M5Cardputer.Speaker.tone(2000, 80); // High crisp beep for Good form
+            }
             ledPixel.setPixelColor(0, ledPixel.Color(0, 180, 0)); // Green flash
             led_flash_end_time = millis() + 450;
             led_flashing = true;
         } else if (rep_beep_type == 2) {
-            M5Cardputer.Speaker.tone(1000, 120); // Medium beep for Ok form
+            if (!sound_muted) {
+                M5Cardputer.Speaker.tone(1000, 120); // Medium beep for Ok form
+            }
             ledPixel.setPixelColor(0, ledPixel.Color(150, 150, 0)); // Yellow flash
             led_flash_end_time = millis() + 450;
             led_flashing = true;
         } else if (rep_beep_type == 3) {
-            M5Cardputer.Speaker.tone(400, 250); // Low, long buzz for Bad form (too fast)
+            if (!sound_muted) {
+                M5Cardputer.Speaker.tone(400, 250); // Low, long buzz for Bad form (too fast)
+            }
             ledPixel.setPixelColor(0, ledPixel.Color(180, 0, 0)); // Red flash
             led_flash_end_time = millis() + 600;
             led_flashing = true;

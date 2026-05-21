@@ -3422,6 +3422,7 @@ void loop() {
                         routine_confirm_delete = false;
                     } else {
                         if (routines_count > 0) {
+                            finishSession(); // Close and save any active session first
                             routine_active = true;
                             active_routine_idx = selected_routine_idx;
                             routine_selected_ex_idx = 0;

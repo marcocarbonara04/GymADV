@@ -3752,7 +3752,7 @@ void loop() {
                             sound_muted = !sound_muted;
                             saveSoundConfig();
                             is_hotkey = true;
-                        } else if (i == 'q' || i == 'Q') {
+                        } else if (i == 'p' || i == 'P') {
                             current_view = VIEW_SETUP;
                             setup_step = 0;
                             bg_color = BLACK;

@@ -8,13 +8,14 @@ This system integrates real-time velocity analysis (**VBT - Velocity Based Train
 
 ## 🚀 Key Features
 
-### 1. 📊 Real-Time Biomechanics & VBT (Velocity Based Training)
-* **100Hz IMU Precision Sampling:** Tracks repetitions, distance, and acceleration using the onboard accelerometer (specifically tuned for short-travel weight stacks of only a few centimeters).
-* **Rep-by-Rep Peak Velocity Profile:** Records and stores the peak concentric velocity ($m/s$) of *every single repetition* in a set, creating a precise fatigue-management profile.
+### 1. 📊 Advanced Biomechanics & Velocity Based Training (VBT)
+* **ZUPT Algorithm (Zero-Velocity Update):** The 100Hz IMU precision sampling incorporates an advanced Buttersworth low-pass filter and ZUPT algorithm, stopping cumulative velocity drift by instantly resetting drift errors during isometric pauses.
+* **Target Velocity Loss (VL%) Autoregulation:** At the first boot, you take a Setup Quiz to define your goal (Hypertrophy, Strength, Power). The system automatically tracks the *Velocity Loss* relative to your most explosive repetition in the set, and alerts you precisely when your target metabolic fatigue is reached.
+* **Polynomial 1RM Prediction Models:** For free weight exercises (Barbell/Dumbbell), the system dynamically estimates your real-time 1RM using scientific polynomial equations based on the velocity of your best rep of the day, disabling itself intelligently for cable and machine exercises to prevent pulley inaccuracies.
 * **Adaptive Acoustic Feedback (Rep-Beep):** Instantly guides your form using high-fidelity tone beeps:
-  * 🟢 **High Pitch:** Perfect form (perfect concentric-to-eccentric control ratio).
-  * 🟡 **Medium Pitch:** Good form (stable repetition pacing).
-  * 🔴 **Low Pitch:** Poor form (repetition completed too quickly or dropped too fast).
+  * 🟢 **Short High Pitch:** Fresh, high velocity ($VL\%$ well within target).
+  * 🟡 **Short Medium Pitch:** Fatiguing ($VL\%$ approaching target).
+  * 🔴 **Short Low Pitch:** Fatigue Target Reached (drop the weight, end of set!).
 
 ### 2. ⚡ Intelligent Power Saver (Backlight Dimmer)
 * **Smart Backlight Dimmer:** During rest timers (`STATE_SUMMARY`), the screen auto-dims to 25% brightness (`40`) after 10 seconds of inactivity, extending battery life by up to **40%**. It instantly wakes to full brightness (`160`) at 5 seconds remaining (with an alarm beep) or as soon as any key is pressed.

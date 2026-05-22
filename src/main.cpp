@@ -15,6 +15,22 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <Preferences.h>
+
+Preferences preferences;
+
+// VBT Athlete Profile
+int athlete_gender = 0; // 0=Male, 1=Female
+int athlete_experience = 0; // 0=Novice, 1=Intermediate, 2=Advanced
+int training_goal = 0; // 0=Hypertrophy (VL 40%), 1=Strength (VL 20%), 2=Power (VL 10%)
+float target_velocity_loss = 0.40f; 
+bool profile_setup_done = false;
+int setup_step = 0;
+
+// Kinematics State
+float current_velocity = 0.0f;
+float max_rep_velocity = 0.0f;
+float current_velocity_loss = 0.0f;
 
 // --- POWER MANAGEMENT & VBT ---
 bool wifi_enabled = false;
@@ -210,7 +226,6 @@ uint8_t current_backlight_brightness = 160; // 0-255 scale
 unsigned long last_key_activity_time = 0;
 bool is_time_synced = false;
 
-float current_velocity = 0.0f;
 float peak_velocity = 0.0f;
 float last_rep_peak_vel = 0.0f;
 std::vector<float> current_set_rep_velocities;
@@ -878,7 +893,7 @@ void loadRoutines() {
 // --- DISPLAY STYLING ---
 M5Canvas canvas(&M5Cardputer.Display);
 
-enum AppView { VIEW_WORKOUT, VIEW_STATS, VIEW_EXERCISES, VIEW_HISTORY, VIEW_PR, VIEW_ROUTINES, VIEW_CARDIO, VIEW_HELP, VIEW_HISTORY_DETAIL };
+enum AppView { VIEW_WORKOUT, VIEW_STATS, VIEW_EXERCISES, VIEW_HISTORY, VIEW_PR, VIEW_ROUTINES, VIEW_CARDIO, VIEW_HELP, VIEW_HISTORY_DETAIL, VIEW_SETUP };
 AppView current_view = VIEW_WORKOUT;
 int help_selected_idx = 0;
 int help_scroll_offset = 0;
@@ -1371,7 +1386,7 @@ void drawUI() {
                     canvas.setTextColor(C_LABEL);
                     canvas.setTextSize(1);
                     canvas.drawString("REPS", 18, 41);
-                    canvas.drawString("FORM", 76, 41);
+                    canvas.drawString("VL%", 76, 41);
                     canvas.drawString("VOL", 137, 41);
                     canvas.drawString("VBT", 195, 41);
                     
@@ -1379,15 +1394,15 @@ void drawUI() {
                     canvas.setTextColor(WHITE);
                     canvas.drawString(String((int)current_reps), 22, 57);
                     
-                    int bad = (int)current_poor_form_reps;
-                    canvas.setTextColor(bad == 0 ? C_IGREEN : (bad < current_reps ? C_IYELLOW : C_IRED));
-                    canvas.drawString(bad == 0 ? "OK" : String(bad) + "x", 78, 57);
+                    int vl_pct = (int)(current_velocity_loss * 100.0f);
+                    canvas.setTextColor(vl_pct > target_velocity_loss * 100 ? C_IRED : (vl_pct > target_velocity_loss * 50 ? C_IYELLOW : C_IGREEN));
+                    canvas.drawString(String(vl_pct) + "%", 78, 57);
                     
                     canvas.setTextColor(C_ACCENT);
                     canvas.drawString(String((int)(current_weight * current_reps)), 126, 57);
                     
                     canvas.setTextColor(C_IORANGE);
-                    canvas.drawString(String(last_rep_peak_vel, 1), 185, 57);
+                    canvas.drawString(String(last_rep_peak_vel, 2), 185, 57);
                     
                     canvas.fillRoundRect(20, 85, 200, 32, 8, C_CARD);
                     
@@ -2257,6 +2272,32 @@ void drawUI() {
             canvas.setTextColor(sel ? WHITE : C_LABEL);
             canvas.drawString(item.desc, 58, y + 5);
         }
+    } else if (current_view == VIEW_SETUP) {
+        canvas.fillSprite(C_BG);
+        canvas.setTextColor(C_ACCENT); canvas.setTextSize(1.5);
+        canvas.drawString("VBT Setup Profile", 10, 10);
+        canvas.drawLine(0, 28, 240, 28, C_CARD);
+        
+        canvas.setTextColor(WHITE); canvas.setTextSize(1);
+        
+        if (setup_step == 0) {
+            canvas.drawString("Gender:", 10, 40);
+            canvas.drawString(athlete_gender == 0 ? "> Male" : "  Male", 20, 60);
+            canvas.drawString(athlete_gender == 1 ? "> Female" : "  Female", 20, 80);
+        } else if (setup_step == 1) {
+            canvas.drawString("Experience:", 10, 40);
+            canvas.drawString(athlete_experience == 0 ? "> Novice" : "  Novice", 20, 60);
+            canvas.drawString(athlete_experience == 1 ? "> Intermediate" : "  Intermediate", 20, 80);
+            canvas.drawString(athlete_experience == 2 ? "> Advanced" : "  Advanced", 20, 100);
+        } else if (setup_step == 2) {
+            canvas.drawString("Goal:", 10, 40);
+            canvas.drawString(training_goal == 0 ? "> Hypertrophy" : "  Hypertrophy", 20, 60);
+            canvas.drawString(training_goal == 1 ? "> Strength" : "  Strength", 20, 80);
+            canvas.drawString(training_goal == 2 ? "> Power" : "  Power", 20, 100);
+        }
+        
+        canvas.setTextColor(C_IGRAY);
+        canvas.drawString("UP/DOWN:select  ENT:next", 10, 120);
     }
     
     canvas.pushSprite(0, 0);
@@ -2379,9 +2420,37 @@ void saveSet() {
     if (current_reps == 0) return;
     
     // Calculate 1RM (Epley formula): 1RM = w * (1 + r/30)
+    float epley1RM = current_weight * (1.0f + (float)current_reps / 30.0f);
+    float vbt1RM = 0.0f;
+    
+    uint8_t eq = 3; // EQ_MACHINE default
+    for (int m = 0; m < NUM_MUSCLES - 1; m++) {
+        for (int e = 0; e < ex_count[m]; e++) {
+            if (active_exercise.equalsIgnoreCase(String(exercise_db[m][e]))) {
+                eq = exercise_equip[m][e];
+            }
+        }
+    }
+    
+    if (eq == 0 || eq == 1) { // EQ_BARBELL or EQ_DUMBBELL
+        String lowerName = active_exercise;
+        lowerName.toLowerCase();
+        float avg_vel = max_rep_velocity; // Use fastest rep for 1RM prediction
+        if (avg_vel > 0.1f) {
+            if (lowerName.indexOf("squat") >= 0) {
+                float perc1RM = (1.3f - avg_vel) / 0.01f;
+                if (perc1RM > 10 && perc1RM <= 100) vbt1RM = current_weight / (perc1RM / 100.0f);
+            } else if (lowerName.indexOf("bench") >= 0 || lowerName.indexOf("chest press") >= 0) {
+                float perc1RM = (1.2f - avg_vel) / 0.012f;
+                if (perc1RM > 10 && perc1RM <= 100) vbt1RM = current_weight / (perc1RM / 100.0f);
+            }
+        }
+    }
+    
+    float final_e1rm = (vbt1RM > current_weight && vbt1RM < epley1RM * 1.5f) ? vbt1RM : epley1RM;
+    
     if (current_reps > 0 && current_reps <= 12) {
-        float e1rm = current_weight * (1.0f + (float)current_reps / 30.0f);
-        if (e1rm > estimated_1rm) estimated_1rm = e1rm;
+        if (final_e1rm > estimated_1rm) estimated_1rm = final_e1rm;
     }
     
     if (estimated_1rm > 0) {
@@ -2636,15 +2705,49 @@ void updateLED() {
 }
 
 // --- IMU LOGIC ---
+float linear_acc = 0.0f;
+float last_acc = 0.0f;
+unsigned long last_imu_time = 0;
+int zupt_counter = 0;
+
 void updateIMU() {
     float ax, ay, az;
     M5.Imu.getAccelData(&ax, &ay, &az);
+    unsigned long now = millis();
+    
+    // Time delta for integration
+    float dt = 0.01f; // assuming ~100Hz
+    if (last_imu_time > 0) {
+        dt = (now - last_imu_time) / 1000.0f;
+    }
+    last_imu_time = now;
+    if (dt > 0.1f) dt = 0.01f; // prevent huge jumps
     
     // Use magnitude to be orientation independent
     float acc_mag = sqrt(ax*ax + ay*ay + az*az);
     
     // Low pass filter
     filtered_acc = ALPHA_LPF * acc_mag + (1.0f - ALPHA_LPF) * filtered_acc;
+    
+    // Linear acceleration (subtract gravity 1.0g). Convert to m/s^2.
+    linear_acc = (filtered_acc - 1.0f) * 9.81f;
+    
+    // ZUPT (Zero Velocity Update) - if linear acc is very close to 0 for a while
+    if (abs(linear_acc) < 0.2f) { // ~0.02g deadband
+        zupt_counter++;
+        if (zupt_counter > 20) { // ~200ms of stillness
+            current_velocity = 0.0f;
+        }
+    } else {
+        zupt_counter = 0;
+    }
+    
+    // Trapezoidal Integration for Velocity
+    if (zupt_counter <= 20) {
+        current_velocity += ((linear_acc + last_acc) / 2.0f) * dt;
+    }
+    
+    last_acc = linear_acc;
 }
 
 void processRepetition() {
@@ -2664,6 +2767,24 @@ void processRepetition() {
     static float peak_acc = 1.0f;                // track peak during concentric
     static float valley_acc = 1.0f;              // track valley during eccentric
 
+    auto evaluateVL = [&](float p_vel) {
+        if (p_vel > max_rep_velocity) max_rep_velocity = p_vel;
+        current_velocity_loss = 0.0f;
+        if (max_rep_velocity > 0.0f) current_velocity_loss = (max_rep_velocity - p_vel) / max_rep_velocity;
+        
+        if (current_velocity_loss <= target_velocity_loss * 0.5f) {
+            bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green
+            rep_beep_type = 1;
+        } else if (current_velocity_loss <= target_velocity_loss) {
+            bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow
+            rep_beep_type = 2;
+        } else {
+            bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red
+            current_poor_form_reps++;
+            rep_beep_type = 3;
+        }
+    };
+
     if (!is_eccentric_first) {
         // --- CONCENTRIC-FIRST WORKFLOW (Standard lifting first, e.g., curls, pulls) ---
         switch (rep_phase) {
@@ -2676,13 +2797,11 @@ void processRepetition() {
                     concentric_start_time = now;
                     peak_acc = acc;
                     in_neutral = false;
-                    current_velocity = 0;
                     peak_velocity = 0;
                 }
                 break;
                 
             case PHASE_CONCENTRIC:
-                current_velocity += (acc - 1.0f) * 9.81f * 0.01f;
                 if (current_velocity > peak_velocity) peak_velocity = current_velocity;
                 if (acc > peak_acc) peak_acc = acc;
                 
@@ -2712,23 +2831,7 @@ void processRepetition() {
                         last_rep_time = now;
                         last_rep_peak_vel = peak_velocity;
                         current_set_rep_velocities.push_back(peak_velocity);
-                        
-                        float ratio = (float)current_eccentric_duration / (float)current_concentric_duration;
-                        bool good_form = (ratio >= 1.2f) || (current_eccentric_duration >= 1500);
-                        bool ok_form = (ratio >= 0.8f) || (current_eccentric_duration >= 1000);
-                        
-                        if (good_form) {
-                            bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green
-                            rep_beep_type = 1;
-                        } else if (ok_form) {
-                            bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow
-                            current_poor_form_reps++;
-                            rep_beep_type = 2;
-                        } else {
-                            bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red
-                            current_poor_form_reps++;
-                            rep_beep_type = 3;
-                        }
+                        evaluateVL(peak_velocity);
                     }
                     rep_phase = PHASE_REST;
                     in_neutral = false;
@@ -2750,7 +2853,6 @@ void processRepetition() {
                     eccentric_start_time = now;
                     valley_acc = acc;
                     in_neutral = false;
-                    current_velocity = 0;
                     peak_velocity = 0;
                 }
                 break;
@@ -2774,7 +2876,6 @@ void processRepetition() {
                 break;
                 
             case PHASE_CONCENTRIC:
-                current_velocity += (acc - 1.0f) * 9.81f * 0.01f;
                 if (current_velocity > peak_velocity) peak_velocity = current_velocity;
                 if (acc > peak_acc) peak_acc = acc;
                 
@@ -2786,23 +2887,7 @@ void processRepetition() {
                         last_rep_time = now;
                         last_rep_peak_vel = peak_velocity;
                         current_set_rep_velocities.push_back(peak_velocity);
-                        
-                        float ratio = (float)current_eccentric_duration / (float)current_concentric_duration;
-                        bool good_form = (ratio >= 1.2f) || (current_eccentric_duration >= 1500);
-                        bool ok_form = (ratio >= 0.8f) || (current_eccentric_duration >= 1000);
-                        
-                        if (good_form) {
-                            bg_color = M5Cardputer.Display.color565(0, 100, 0); // Green
-                            rep_beep_type = 1;
-                        } else if (ok_form) {
-                            bg_color = M5Cardputer.Display.color565(150, 100, 0); // Yellow
-                            current_poor_form_reps++;
-                            rep_beep_type = 2;
-                        } else {
-                            bg_color = M5Cardputer.Display.color565(120, 0, 0); // Red
-                            current_poor_form_reps++;
-                            rep_beep_type = 3;
-                        }
+                        evaluateVL(peak_velocity);
                     }
                     rep_phase = PHASE_REST;
                     in_neutral = false;
@@ -2957,6 +3042,18 @@ void setup() {
     // Initialize LittleFS for workout data storage
     if(!LittleFS.begin(true)){
         Serial.println("LittleFS Mount Failed");
+    }
+    
+    // Load VBT Preferences
+    preferences.begin("gymadv", false);
+    profile_setup_done = preferences.getBool("setup_done", false);
+    if(profile_setup_done) {
+        athlete_gender = preferences.getInt("gender", 0);
+        athlete_experience = preferences.getInt("exp", 0);
+        training_goal = preferences.getInt("goal", 0);
+        target_velocity_loss = preferences.getFloat("vl", 0.40f);
+    } else {
+        current_view = VIEW_SETUP;
     }
     
     // Initialize SPI for M5Cardputer SD card slot
@@ -3336,6 +3433,7 @@ void loop() {
                         current_reps = 0;
                         current_poor_form_reps = 0;
                         current_set_rep_velocities.clear();
+                        max_rep_velocity = 0.0f; // Reset VBT Tracker
                         bg_color = BLACK;
                         set_start_time = millis();
                         
@@ -3383,6 +3481,26 @@ void loop() {
                         routine_exercising = false; // return to routine exercise list
                     }
                     workout_state = STATE_READY;
+                    bg_color = BLACK;
+                }
+            } else if (current_view == VIEW_SETUP) {
+                if (setup_step == 0) {
+                    setup_step++;
+                } else if (setup_step == 1) {
+                    setup_step++;
+                } else if (setup_step == 2) {
+                    profile_setup_done = true;
+                    if (training_goal == 0) target_velocity_loss = 0.40f;
+                    else if (training_goal == 1) target_velocity_loss = 0.20f;
+                    else if (training_goal == 2) target_velocity_loss = 0.10f;
+                    
+                    preferences.putBool("setup_done", true);
+                    preferences.putInt("gender", athlete_gender);
+                    preferences.putInt("exp", athlete_experience);
+                    preferences.putInt("goal", training_goal);
+                    preferences.putFloat("vl", target_velocity_loss);
+                    
+                    current_view = VIEW_WORKOUT;
                     bg_color = BLACK;
                 }
             } else if (current_view == VIEW_EXERCISES) {
@@ -3850,6 +3968,17 @@ void loop() {
                         if (i == '.' || i == '/') { // DOWN
                             if (help_selected_idx < 13) help_selected_idx++;
                             else help_selected_idx = 0; // Wrap to first
+                        }
+                    } else if (current_view == VIEW_SETUP) {
+                        if (i == ';' || i == ',') { // UP
+                            if (setup_step == 0) athlete_gender = 0;
+                            else if (setup_step == 1 && athlete_experience > 0) athlete_experience--;
+                            else if (setup_step == 2 && training_goal > 0) training_goal--;
+                        }
+                        if (i == '.' || i == '/') { // DOWN
+                            if (setup_step == 0) athlete_gender = 1;
+                            else if (setup_step == 1 && athlete_experience < 2) athlete_experience++;
+                            else if (setup_step == 2 && training_goal < 2) training_goal++;
                         }
                     }
                 }

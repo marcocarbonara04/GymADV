@@ -2280,24 +2280,39 @@ void drawUI() {
         
         canvas.setTextColor(WHITE); canvas.setTextSize(1);
         
+        String title = "";
+        std::vector<String> options;
+        int selected_idx = 0;
+        
         if (setup_step == 0) {
-            canvas.drawString("Gender:", 10, 40);
-            canvas.drawString(athlete_gender == 0 ? "> Male" : "  Male", 20, 60);
-            canvas.drawString(athlete_gender == 1 ? "> Female" : "  Female", 20, 80);
+            title = "Gender:";
+            options = {"Male", "Female"};
+            selected_idx = athlete_gender;
         } else if (setup_step == 1) {
-            canvas.drawString("Experience:", 10, 40);
-            canvas.drawString(athlete_experience == 0 ? "> Novice" : "  Novice", 20, 60);
-            canvas.drawString(athlete_experience == 1 ? "> Intermediate" : "  Intermediate", 20, 80);
-            canvas.drawString(athlete_experience == 2 ? "> Advanced" : "  Advanced", 20, 100);
+            title = "Experience:";
+            options = {"Novice", "Intermediate", "Advanced"};
+            selected_idx = athlete_experience;
         } else if (setup_step == 2) {
-            canvas.drawString("Goal:", 10, 40);
-            canvas.drawString(training_goal == 0 ? "> Hypertrophy" : "  Hypertrophy", 20, 60);
-            canvas.drawString(training_goal == 1 ? "> Strength" : "  Strength", 20, 80);
-            canvas.drawString(training_goal == 2 ? "> Power" : "  Power", 20, 100);
+            title = "Goal:";
+            options = {"Hypertrophy", "Strength", "Power"};
+            selected_idx = training_goal;
+        }
+        
+        canvas.drawString(title, 10, 35);
+        
+        for (size_t i = 0; i < options.size(); i++) {
+            bool sel = ((int)i == selected_idx);
+            int y = 55 + i * 22;
+            canvas.fillRoundRect(10, y, 220, 20, 4, sel ? C_CARD_HI : C_CARD);
+            if (sel) {
+                canvas.drawRoundRect(10, y, 220, 20, 4, C_ACCENT);
+            }
+            canvas.setTextColor(sel ? WHITE : C_LABEL);
+            canvas.drawString(options[i], 20, y + 6);
         }
         
         canvas.setTextColor(C_IGRAY);
-        canvas.drawString("UP/DOWN:select  ENT:next", 10, 120);
+        canvas.drawString("UP/DOWN:select  ENT:next", 10, 123);
     }
     
     canvas.pushSprite(0, 0);
@@ -2756,8 +2771,8 @@ void processRepetition() {
     
     // Neutral zone: acceleration must return near 1.0g between reps
     // Tighter neutral zone to detect small deviations on short-range reps
-    const float NEUTRAL_LOW  = 0.97f;
-    const float NEUTRAL_HIGH = 1.03f;
+    const float NEUTRAL_LOW  = 0.90f;
+    const float NEUTRAL_HIGH = 1.10f;
     const unsigned long MIN_PHASE_MS    = 200;   // slightly shorter phase validation (200ms) for fast short-stroke movements
     const unsigned long COOLDOWN_MS     = 300;   // lockout after counting a rep
     const unsigned long PHASE_TIMEOUT   = 5000;  // abort if stuck in a phase
@@ -3653,77 +3668,95 @@ void loop() {
                         }
                     }
                     
-                    if (i == '1') {
-                        current_view = VIEW_WORKOUT;
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == '2') {
-                        current_view = VIEW_STATS;
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                        loadStatsGraphData();
-                    } else if (i == '7') {
-                        current_view = VIEW_CARDIO;
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == '3') {
-                        current_view = VIEW_EXERCISES;
-                        selecting_muscle = true;
-                        menu_scroll_offset = 0;
-                        search_query = "";
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == '4') {
-                        current_view = VIEW_HISTORY;
-                        bg_color = BLACK;
-                        loadHistory();
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == '5') {
-                        current_view = VIEW_PR;
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == '6') {
-                        current_view = VIEW_ROUTINES;
-                        bg_color = BLACK;
-                        loadRoutines();
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == 'h' || i == 'H') {
-                        if (current_view == VIEW_HELP) {
+                    bool is_hotkey = false;
+                    if (current_view != VIEW_SETUP) {
+                        if (i == '1') {
                             current_view = VIEW_WORKOUT;
-                        } else {
-                            current_view = VIEW_HELP;
-                            help_selected_idx = 0;
-                            help_scroll_offset = 0;
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == '2') {
+                            current_view = VIEW_STATS;
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            loadStatsGraphData();
+                            is_hotkey = true;
+                        } else if (i == '7') {
+                            current_view = VIEW_CARDIO;
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == '3') {
+                            current_view = VIEW_EXERCISES;
+                            selecting_muscle = true;
+                            menu_scroll_offset = 0;
+                            search_query = "";
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == '4') {
+                            current_view = VIEW_HISTORY;
+                            bg_color = BLACK;
+                            loadHistory();
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == '5') {
+                            current_view = VIEW_PR;
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == '6') {
+                            current_view = VIEW_ROUTINES;
+                            bg_color = BLACK;
+                            loadRoutines();
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == 'h' || i == 'H') {
+                            if (current_view == VIEW_HELP) {
+                                current_view = VIEW_WORKOUT;
+                            } else {
+                                current_view = VIEW_HELP;
+                                help_selected_idx = 0;
+                                help_scroll_offset = 0;
+                            }
+                            bg_color = BLACK;
+                            history_confirm_delete = false;
+                            routine_confirm_delete = false;
+                            is_hotkey = true;
+                        } else if (i == 'w' || i == 'W') {
+                            if (show_wifi_qr) {
+                                show_wifi_qr = false;
+                            } else if (!wifi_enabled) {
+                                startWiFi();
+                                show_wifi_qr = true;
+                            } else {
+                                stopWiFi();
+                            }
+                            is_hotkey = true;
+                        } else if (i == 'b' || i == 'B') {
+                            ble_enabled = !ble_enabled;
+                            if (!ble_enabled) {
+                                disconnectBLE();
+                            } else {
+                                doScan = true;
+                            }
+                            is_hotkey = true;
+                        } else if (i == 'm' || i == 'M') {
+                            sound_muted = !sound_muted;
+                            saveSoundConfig();
+                            is_hotkey = true;
                         }
-                        bg_color = BLACK;
-                        history_confirm_delete = false;
-                        routine_confirm_delete = false;
-                    } else if (i == 'w' || i == 'W') {
-                        if (show_wifi_qr) {
-                            show_wifi_qr = false;
-                        } else if (!wifi_enabled) {
-                            startWiFi();
-                            show_wifi_qr = true;
-                        } else {
-                            stopWiFi();
-                        }
-                    } else if (i == 'b' || i == 'B') {
-                        ble_enabled = !ble_enabled;
-                        if (!ble_enabled) {
-                            disconnectBLE();
-                        } else {
-                            doScan = true;
-                        }
-                    } else if (i == 'm' || i == 'M') {
-                        sound_muted = !sound_muted;
-                        saveSoundConfig();
+                    }
+                    
+                    if (is_hotkey) {
+                        continue;
                     } else if (current_view == VIEW_WORKOUT && workout_state == STATE_READY) {
                         if (i == 'e' || i == 'E') {
                             editing_weight = true;

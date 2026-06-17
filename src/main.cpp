@@ -314,6 +314,7 @@ int rest_target_sec = 90;
 
 // Feature: set counter per exercise
 int current_set_number = 0;
+bool is_current_set_warmup = false;
 
 // Feature: 1RM tracking
 float estimated_1rm = 0;
@@ -353,6 +354,7 @@ struct SessionSet {
     std::vector<int> hr_series;
     std::vector<int> hr_rec_series;
     std::vector<float> rep_velocities; // VBT peak velocity profile for each rep (m/s)
+    bool warmup;
 };
 
 struct SessionExercise {
@@ -362,6 +364,8 @@ struct SessionExercise {
 
 struct SessionLog {
     unsigned long long t; // timestamp of session start
+    bool routine_active = false;
+    int active_routine_idx = 0;
     std::vector<SessionExercise> exercises;
 };
 
@@ -370,6 +374,8 @@ SessionLog active_session;
 
 void serializeSession(const SessionLog &session, JsonVariant doc) {
     doc["t"] = session.t;
+    doc["ra"] = session.routine_active;
+    doc["ri"] = session.active_routine_idx;
     JsonArray exercisesArr = doc["exercises"].to<JsonArray>();
     for (const auto &ex : session.exercises) {
         JsonObject exObj = exercisesArr.add<JsonObject>();
@@ -378,6 +384,7 @@ void serializeSession(const SessionLog &session, JsonVariant doc) {
         for (const auto &s : ex.sets) {
             JsonObject sObj = setsArr.add<JsonObject>();
             sObj["s"] = s.s;
+            sObj["wu"] = s.warmup;
             sObj["r"] = s.r;
             sObj["w"] = s.w;
             sObj["v"] = s.v;
@@ -402,6 +409,8 @@ void serializeSession(const SessionLog &session, JsonVariant doc) {
 
 void deserializeSession(JsonVariant doc, SessionLog &session) {
     session.t = doc["t"] | 0ULL;
+    session.routine_active = doc["ra"] | false;
+    session.active_routine_idx = doc["ri"] | 0;
     session.exercises.clear();
     if (doc["exercises"].is<JsonArray>()) {
         JsonArray exercisesArr = doc["exercises"].as<JsonArray>();
@@ -413,6 +422,7 @@ void deserializeSession(JsonVariant doc, SessionLog &session) {
                 for (JsonObject sObj : setsArr) {
                     SessionSet s;
                     s.s = sObj["s"] | 0;
+                    s.warmup = sObj["wu"] | false;
                     s.r = sObj["r"] | 0;
                     s.w = sObj["w"] | 0;
                     s.v = sObj["v"] | 0;
@@ -673,9 +683,11 @@ const byte DNS_PORT = 53;
 struct RoutineExercise {
     char name[32];
     int target_sets;
+    int warmup_sets;
     int target_reps;
     int target_rest; // in seconds
     int completed_sets;
+    int completed_warmup_sets;
 };
 
 struct Routine {
@@ -828,6 +840,7 @@ void saveRoutines() {
             JsonObject ex = exs.add<JsonObject>();
             ex["name"] = routines[i].exercises[j].name;
             ex["sets"] = routines[i].exercises[j].target_sets;
+            ex["warmup"] = routines[i].exercises[j].warmup_sets;
             ex["reps"] = routines[i].exercises[j].target_reps;
             ex["rest"] = routines[i].exercises[j].target_rest;
         }
@@ -841,28 +854,111 @@ void loadRoutines() {
     routines_count = 0;
     fs::FS& fs = getWorkoutLogFS();
     if (!fs.exists("/routines.json")) {
-        // Seed with a default demo routine so the user has something immediately!
-        routines_count = 1;
-        strcpy(routines[0].name, "Full Body A");
-        routines[0].exercise_count = 3;
+        // Seed with GymADV Pro 3-Day Split
+        routines_count = 3;
         
-        strcpy(routines[0].exercises[0].name, "Bench Press");
-        routines[0].exercises[0].target_sets = 4;
-        routines[0].exercises[0].target_reps = 10;
-        routines[0].exercises[0].target_rest = 90;
-        routines[0].exercises[0].completed_sets = 0;
+        // --- GIORNO A ---
+        strcpy(routines[0].name, "Giorno A");
+        routines[0].exercise_count = 7;
+        
+        strcpy(routines[0].exercises[0].name, "Chest Press Conv.");
+        routines[0].exercises[0].target_sets = 4; routines[0].exercises[0].warmup_sets = 3;
+        routines[0].exercises[0].target_reps = 8; routines[0].exercises[0].target_rest = 150;
+        
+        strcpy(routines[0].exercises[1].name, "Pressa 45 gradi");
+        routines[0].exercises[1].target_sets = 4; routines[0].exercises[1].warmup_sets = 2;
+        routines[0].exercises[1].target_reps = 10; routines[0].exercises[1].target_rest = 120;
+        
+        strcpy(routines[0].exercises[2].name, "Lat Machine Prona");
+        routines[0].exercises[2].target_sets = 3; routines[0].exercises[2].warmup_sets = 1;
+        routines[0].exercises[2].target_reps = 10; routines[0].exercises[2].target_rest = 120;
+        
+        strcpy(routines[0].exercises[3].name, "Alzate Laterali Cavi");
+        routines[0].exercises[3].target_sets = 4; routines[0].exercises[3].warmup_sets = 0;
+        routines[0].exercises[3].target_reps = 15; routines[0].exercises[3].target_rest = 90;
+        
+        strcpy(routines[0].exercises[4].name, "Curl Panca 45");
+        routines[0].exercises[4].target_sets = 3; routines[0].exercises[4].warmup_sets = 1;
+        routines[0].exercises[4].target_reps = 12; routines[0].exercises[4].target_rest = 90;
+        
+        strcpy(routines[0].exercises[5].name, "Pushdown Corda");
+        routines[0].exercises[5].target_sets = 3; routines[0].exercises[5].warmup_sets = 1;
+        routines[0].exercises[5].target_reps = 12; routines[0].exercises[5].target_rest = 90;
+        
+        strcpy(routines[0].exercises[6].name, "Calf Seduto");
+        routines[0].exercises[6].target_sets = 4; routines[0].exercises[6].warmup_sets = 1;
+        routines[0].exercises[6].target_reps = 20; routines[0].exercises[6].target_rest = 60;
+        
+        // --- GIORNO B ---
+        strcpy(routines[1].name, "Giorno B");
+        routines[1].exercise_count = 7;
+        
+        strcpy(routines[1].exercises[0].name, "Pulley Basso V");
+        routines[1].exercises[0].target_sets = 4; routines[1].exercises[0].warmup_sets = 3;
+        routines[1].exercises[0].target_reps = 10; routines[1].exercises[0].target_rest = 120;
+        
+        strcpy(routines[1].exercises[1].name, "Shoulder Press");
+        routines[1].exercises[1].target_sets = 4; routines[1].exercises[1].warmup_sets = 2;
+        routines[1].exercises[1].target_reps = 10; routines[1].exercises[1].target_rest = 120;
+        
+        strcpy(routines[1].exercises[2].name, "Incline Chest Press");
+        routines[1].exercises[2].target_sets = 3; routines[1].exercises[2].warmup_sets = 1;
+        routines[1].exercises[2].target_reps = 10; routines[1].exercises[2].target_rest = 120;
+        
+        strcpy(routines[1].exercises[3].name, "Leg Press Orizz.");
+        routines[1].exercises[3].target_sets = 3; routines[1].exercises[3].warmup_sets = 1;
+        routines[1].exercises[3].target_reps = 12; routines[1].exercises[3].target_rest = 90;
+        
+        strcpy(routines[1].exercises[4].name, "Hammer Curl");
+        routines[1].exercises[4].target_sets = 3; routines[1].exercises[4].warmup_sets = 0;
+        routines[1].exercises[4].target_reps = 10; routines[1].exercises[4].target_rest = 90;
+        
+        strcpy(routines[1].exercises[5].name, "French Press Manubri");
+        routines[1].exercises[5].target_sets = 3; routines[1].exercises[5].warmup_sets = 1;
+        routines[1].exercises[5].target_reps = 12; routines[1].exercises[5].target_rest = 90;
+        
+        strcpy(routines[1].exercises[6].name, "Crunch Cavo Alto");
+        routines[1].exercises[6].target_sets = 3; routines[1].exercises[6].warmup_sets = 0;
+        routines[1].exercises[6].target_reps = 15; routines[1].exercises[6].target_rest = 60;
 
-        strcpy(routines[0].exercises[1].name, "Squat");
-        routines[0].exercises[1].target_sets = 4;
-        routines[0].exercises[1].target_reps = 8;
-        routines[0].exercises[1].target_rest = 120;
-        routines[0].exercises[1].completed_sets = 0;
+        // --- GIORNO C ---
+        strcpy(routines[2].name, "Giorno C");
+        routines[2].exercise_count = 7;
+        
+        strcpy(routines[2].exercises[0].name, "Leg Curl");
+        routines[2].exercises[0].target_sets = 4; routines[2].exercises[0].warmup_sets = 2;
+        routines[2].exercises[0].target_reps = 12; routines[2].exercises[0].target_rest = 90;
+        
+        strcpy(routines[2].exercises[1].name, "Pec Deck");
+        routines[2].exercises[1].target_sets = 3; routines[2].exercises[1].warmup_sets = 1;
+        routines[2].exercises[1].target_reps = 15; routines[2].exercises[1].target_rest = 90;
+        
+        strcpy(routines[2].exercises[2].name, "Vertical Row");
+        routines[2].exercises[2].target_sets = 3; routines[2].exercises[2].warmup_sets = 1;
+        routines[2].exercises[2].target_reps = 10; routines[2].exercises[2].target_rest = 120;
+        
+        strcpy(routines[2].exercises[3].name, "Alzate Lat. Manubri");
+        routines[2].exercises[3].target_sets = 3; routines[2].exercises[3].warmup_sets = 0;
+        routines[2].exercises[3].target_reps = 12; routines[2].exercises[3].target_rest = 90;
+        
+        strcpy(routines[2].exercises[4].name, "Spider Curl");
+        routines[2].exercises[4].target_sets = 3; routines[2].exercises[4].warmup_sets = 1;
+        routines[2].exercises[4].target_reps = 12; routines[2].exercises[4].target_rest = 90;
+        
+        strcpy(routines[2].exercises[5].name, "Pushdown Barra");
+        routines[2].exercises[5].target_sets = 3; routines[2].exercises[5].warmup_sets = 1;
+        routines[2].exercises[5].target_reps = 10; routines[2].exercises[5].target_rest = 90;
+        
+        strcpy(routines[2].exercises[6].name, "Calf Pressa");
+        routines[2].exercises[6].target_sets = 4; routines[2].exercises[6].warmup_sets = 0;
+        routines[2].exercises[6].target_reps = 15; routines[2].exercises[6].target_rest = 60;
 
-        strcpy(routines[0].exercises[2].name, "Lat Pulldown");
-        routines[0].exercises[2].target_sets = 3;
-        routines[0].exercises[2].target_reps = 12;
-        routines[0].exercises[2].target_rest = 90;
-        routines[0].exercises[2].completed_sets = 0;
+        for (int r = 0; r < routines_count; r++) {
+            for (int e = 0; e < routines[r].exercise_count; e++) {
+                routines[r].exercises[e].completed_sets = 0;
+                routines[r].exercises[e].completed_warmup_sets = 0;
+            }
+        }
         
         saveRoutines();
         return;
@@ -881,9 +977,11 @@ void loadRoutines() {
                 JsonObject ex = exs[j].as<JsonObject>();
                 strncpy(routines[i].exercises[j].name, ex["name"] | "Bench Press", 31);
                 routines[i].exercises[j].target_sets = ex["sets"] | 3;
+                routines[i].exercises[j].warmup_sets = ex["warmup"] | 2;
                 routines[i].exercises[j].target_reps = ex["reps"] | 10;
                 routines[i].exercises[j].target_rest = ex["rest"] | 90;
                 routines[i].exercises[j].completed_sets = 0;
+                routines[i].exercises[j].completed_warmup_sets = 0;
             }
         }
     }
@@ -1230,7 +1328,11 @@ void drawUI() {
                 
                 canvas.setTextColor(C_IGRAY);
                 canvas.setTextSize(1);
-                canvas.drawString("Set " + String(current_set_number + 1), 10, 36);
+                if (is_current_set_warmup) {
+                    canvas.drawString("WARMUP " + String(current_set_number + 1), 10, 36);
+                } else {
+                    canvas.drawString("Set " + String(current_set_number + 1), 10, 36);
+                }
                 
                 canvas.fillRoundRect(50, 34, 40, 14, 4, C_CARD);
                 canvas.setTextColor(C_IORANGE);
@@ -1283,7 +1385,11 @@ void drawUI() {
                 canvas.setTextSize(1);
                 canvas.drawString(active_exercise, 10, 18);
                 canvas.setTextColor(C_ACCENT);
-                canvas.drawString(String(current_weight) + "kg | Set " + String(current_set_number + 1), 10, 29);
+                if (is_current_set_warmup) {
+                    canvas.drawString(String(current_weight) + "kg | Warmup " + String(current_set_number + 1), 10, 29);
+                } else {
+                    canvas.drawString(String(current_weight) + "kg | Set " + String(current_set_number + 1), 10, 29);
+                }
                 
                 if (ble_enabled) {
                     bool hr_stale = (millis() - last_heart_rate_time) > 6000;
@@ -1809,7 +1915,11 @@ void drawUI() {
                     
                     SessionSet &s = ex.sets[sIdx];
                     canvas.setTextColor(WHITE); canvas.setTextSize(1);
-                    canvas.drawString("Set " + String(s.s) + ": " + String(s.w) + "kg x" + String(s.r), 10, y + 3);
+                    if (s.warmup) {
+                        canvas.drawString("W " + String(s.s) + ": " + String(s.w) + "kg x" + String(s.r), 10, y + 3);
+                    } else {
+                        canvas.drawString("Set " + String(s.s) + ": " + String(s.w) + "kg x" + String(s.r), 10, y + 3);
+                    }
                     
                     canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
                     canvas.drawString("Vol: " + String(s.v) + "kg | 1RM: " + String(s.est_1rm) + "k", 10, y + 12);
@@ -2060,7 +2170,8 @@ void drawUI() {
                     if (exName.length() > 14) exName = exName.substring(0, 12) + "..";
                     canvas.drawString(exName, 112, py);
                     canvas.setTextColor(C_IORANGE);
-                    canvas.drawString(String(r.exercises[j].target_sets) + "x" + String(r.exercises[j].target_reps), 205, py);
+                    String setsStr = (r.exercises[j].warmup_sets > 0) ? (String(r.exercises[j].warmup_sets) + "+" + String(r.exercises[j].target_sets)) : String(r.exercises[j].target_sets);
+                    canvas.drawString(setsStr + "x" + String(r.exercises[j].target_reps), 200, py);
                 }
                 if (r.exercise_count > 4) {
                     canvas.setTextColor(C_IGRAY); canvas.setTextSize(1);
@@ -2420,6 +2531,8 @@ void finishSession() {
     // Clear memory active session
     active_session.exercises.clear();
     active_session.t = 0;
+    active_session.routine_active = false;
+    routine_active = false;
     
     // Reset live session trackers
     current_set_number = 0;
@@ -2500,6 +2613,7 @@ void saveSet() {
     // Populate the new Set
     SessionSet newSet;
     newSet.s = current_set_number + 1;
+    newSet.warmup = is_current_set_warmup;
     newSet.r = (int)current_reps;
     newSet.w = (int)current_weight;
     newSet.v = (int)(current_reps * current_weight);
@@ -2522,6 +2636,10 @@ void saveSet() {
     newSet.rep_velocities = current_set_rep_velocities;
     
     active_session.exercises[exIdx].sets.push_back(newSet);
+    
+    // Update global active_session with current routine state
+    active_session.routine_active = routine_active;
+    active_session.active_routine_idx = active_routine_idx;
     
     // Save/Backup active session to temporary file for crash resilience on active filesystem
     JsonDocument tempDoc;
@@ -3083,6 +3201,30 @@ void setup() {
     
     loadDataFiles();
     loadRoutines();
+    
+    // Resume routine if it was active
+    if (active_session.routine_active && active_session.active_routine_idx >= 0 && active_session.active_routine_idx < routines_count) {
+        routine_active = true;
+        active_routine_idx = active_session.active_routine_idx;
+        for (int j = 0; j < routines[active_routine_idx].exercise_count; j++) {
+            String exName = routines[active_routine_idx].exercises[j].name;
+            int w_sets = 0;
+            int c_sets = 0;
+            for (const auto &ex : active_session.exercises) {
+                if (ex.name == exName) {
+                    for (const auto &s : ex.sets) {
+                        if (s.warmup) w_sets++;
+                        else c_sets++;
+                    }
+                }
+            }
+            routines[active_routine_idx].exercises[j].completed_warmup_sets = w_sets;
+            routines[active_routine_idx].exercises[j].completed_sets = c_sets;
+        }
+        routine_exercising = false;
+        current_view = VIEW_WORKOUT;
+    }
+    
     loadCustomExercises();
     
     is_eccentric_first = determineIfEccentricFirst(active_exercise);
@@ -3441,7 +3583,11 @@ void loop() {
                         active_exercise = String(routines[active_routine_idx].exercises[ex_idx].name);
                         current_weight = last_weights_doc[active_exercise] | 20;
                         rest_target_sec = routines[active_routine_idx].exercises[ex_idx].target_rest;
-                        current_set_number = routines[active_routine_idx].exercises[ex_idx].completed_sets;
+                        
+                        int c_w_sets = routines[active_routine_idx].exercises[ex_idx].completed_warmup_sets;
+                        int w_sets = routines[active_routine_idx].exercises[ex_idx].warmup_sets;
+                        is_current_set_warmup = (c_w_sets < w_sets);
+                        current_set_number = is_current_set_warmup ? c_w_sets : routines[active_routine_idx].exercises[ex_idx].completed_sets;
                     } else {
                         workout_state = STATE_ACTIVE;
                         is_eccentric_first = determineIfEccentricFirst(active_exercise);
@@ -3492,7 +3638,11 @@ void loop() {
                     saveSet(); // Save set WITH full recovery heart rate history!
                     if (routine_active) {
                         int ex_idx = routine_selected_ex_idx;
-                        routines[active_routine_idx].exercises[ex_idx].completed_sets++;
+                        if (is_current_set_warmup) {
+                            routines[active_routine_idx].exercises[ex_idx].completed_warmup_sets++;
+                        } else {
+                            routines[active_routine_idx].exercises[ex_idx].completed_sets++;
+                        }
                         routine_exercising = false; // return to routine exercise list
                     }
                     workout_state = STATE_READY;
@@ -3555,16 +3705,22 @@ void loop() {
                         routine_confirm_delete = false;
                     } else {
                         if (routines_count > 0) {
-                            finishSession(); // Close and save any active session first
-                            routine_active = true;
-                            active_routine_idx = selected_routine_idx;
-                            routine_selected_ex_idx = 0;
-                            routine_exercising = false;
-                            for (int k = 0; k < routines[active_routine_idx].exercise_count; k++) {
-                                routines[active_routine_idx].exercises[k].completed_sets = 0;
+                            if (routine_active && active_routine_idx == selected_routine_idx) {
+                                current_view = VIEW_WORKOUT;
+                                bg_color = BLACK;
+                            } else {
+                                finishSession(); // Close and save any active session first
+                                routine_active = true;
+                                active_routine_idx = selected_routine_idx;
+                                routine_selected_ex_idx = 0;
+                                routine_exercising = false;
+                                for (int k = 0; k < routines[active_routine_idx].exercise_count; k++) {
+                                    routines[active_routine_idx].exercises[k].completed_sets = 0;
+                                    routines[active_routine_idx].exercises[k].completed_warmup_sets = 0;
+                                }
+                                current_view = VIEW_WORKOUT;
+                                bg_color = BLACK;
                             }
-                            current_view = VIEW_WORKOUT;
-                            bg_color = BLACK;
                         }
                     }
                 } else if (routine_subview == ROUTINE_PICK_EXERCISE) {
@@ -3577,9 +3733,11 @@ void loop() {
                             String exName = getExerciseName(menu_muscle_idx, menu_exercise_idx);
                             strncpy(temp_routine.exercises[r_idx].name, exName.c_str(), 31);
                             temp_routine.exercises[r_idx].target_sets = 4;
+                            temp_routine.exercises[r_idx].warmup_sets = 2;
                             temp_routine.exercises[r_idx].target_reps = 10;
                             temp_routine.exercises[r_idx].target_rest = 90;
                             temp_routine.exercises[r_idx].completed_sets = 0;
+                            temp_routine.exercises[r_idx].completed_warmup_sets = 0;
                             temp_routine.exercise_count++;
                         }
                         routine_subview = ROUTINE_CREATOR;

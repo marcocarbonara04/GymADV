@@ -1,0 +1,164 @@
+[
+  {
+    "name": "Giorno A",
+    "exercises": [
+      {
+        "name": "Chest Press Conv.",
+        "sets": 4,
+        "warmup": 3,
+        "reps": 8,
+        "rest": 150
+      },
+      {
+        "name": "Pressa 45 gradi",
+        "sets": 4,
+        "warmup": 2,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Lat Machine Prona",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Alzate Laterali Cavi",
+        "sets": 4,
+        "warmup": 0,
+        "reps": 15,
+        "rest": 90
+      },
+      {
+        "name": "Curl Panca 45",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Pushdown Corda",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Calf Seduto",
+        "sets": 4,
+        "warmup": 1,
+        "reps": 20,
+        "rest": 60
+      }
+    ]
+  },
+  {
+    "name": "Giorno B",
+    "exercises": [
+      {
+        "name": "Pulley Basso V",
+        "sets": 4,
+        "warmup": 3,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Shoulder Press",
+        "sets": 4,
+        "warmup": 2,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Incline Chest Press",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Leg Press Orizz.",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Hammer Curl",
+        "sets": 3,
+        "warmup": 0,
+        "reps": 10,
+        "rest": 90
+      },
+      {
+        "name": "French Press Manubri",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Crunch Cavo Alto",
+        "sets": 3,
+        "warmup": 0,
+        "reps": 15,
+        "rest": 60
+      }
+    ]
+  },
+  {
+    "name": "Giorno C",
+    "exercises": [
+      {
+        "name": "Leg Curl",
+        "sets": 4,
+        "warmup": 2,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Pec Deck",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 15,
+        "rest": 90
+      },
+      {
+        "name": "Vertical Row",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 10,
+        "rest": 120
+      },
+      {
+        "name": "Alzate Lat. Manubri",
+        "sets": 3,
+        "warmup": 0,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Spider Curl",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 12,
+        "rest": 90
+      },
+      {
+        "name": "Pushdown Barra",
+        "sets": 3,
+        "warmup": 1,
+        "reps": 10,
+        "rest": 90
+      },
+      {
+        "name": "Calf Pressa",
+        "sets": 4,
+        "warmup": 0,
+        "reps": 15,
+        "rest": 60
+      }
+    ]
+  }
+]
